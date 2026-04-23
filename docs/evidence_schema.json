@@ -1,0 +1,487 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SDLC Framework v2 Evidence Schema",
+  "type": "object",
+  "required": [
+    "repo_meta",
+    "classification",
+    "inventory",
+    "findings",
+    "scoring",
+    "hard_blockers"
+  ],
+  "properties": {
+    "repo_meta": {
+      "type": "object",
+      "required": [
+        "name",
+        "default_branch",
+        "analysis_timestamp"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "default_branch": {
+          "type": "string"
+        },
+        "analysis_timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "head_commit": {
+          "type": "string"
+        },
+        "commit_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tag_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "release_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "percent"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "percent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              }
+            }
+          }
+        }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "required": [
+        "repo_archetype",
+        "maturity_profile",
+        "deployment_surface",
+        "classification_confidence"
+      ],
+      "properties": {
+        "repo_archetype": {
+          "type": "string",
+          "enum": [
+            "service",
+            "library",
+            "cli",
+            "monorepo",
+            "research_repo",
+            "sdk",
+            "infrastructure",
+            "internal_tool",
+            "unknown"
+          ]
+        },
+        "maturity_profile": {
+          "type": "string",
+          "enum": [
+            "production",
+            "prototype",
+            "research",
+            "unknown"
+          ]
+        },
+        "deployment_surface": {
+          "type": "string",
+          "enum": [
+            "networked",
+            "local_only",
+            "package_only",
+            "mixed",
+            "unknown"
+          ]
+        },
+        "network_exposure": {
+          "type": "boolean"
+        },
+        "release_surface": {
+          "type": "string",
+          "enum": [
+            "published_package",
+            "deployable_service",
+            "internal_only",
+            "research_only",
+            "unknown"
+          ]
+        },
+        "classification_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "language_pack_selection": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "required": [
+        "source_files",
+        "source_loc",
+        "test_files",
+        "workflow_files",
+        "runtime_dependencies",
+        "dev_dependencies"
+      ],
+      "properties": {
+        "source_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_loc": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "test_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_test_cases": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "test_to_source_ratio": {
+          "type": "number",
+          "minimum": 0
+        },
+        "workflow_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "workflow_jobs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runtime_dependencies": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dev_dependencies": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "largest_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "bytes"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "subcategory",
+          "severity",
+          "statement",
+          "evidence",
+          "confidence",
+          "applicability",
+          "score_impact",
+          "detector_source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "architecture_design",
+              "code_quality_contracts",
+              "testing_quality_gates",
+              "security_posture",
+              "dependency_release_hygiene",
+              "documentation_truthfulness",
+              "maintainability_operability",
+              "reproducibility_research_rigor"
+            ]
+          },
+          "subcategory": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "statement": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "path"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "line_start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "line_end": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "snippet": {
+                  "type": "string"
+                },
+                "match_type": {
+                  "type": "string",
+                  "enum": [
+                    "exact",
+                    "pattern",
+                    "derived",
+                    "inventory"
+                  ]
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "applicability": {
+            "type": "string",
+            "enum": [
+              "applicable",
+              "partially_applicable",
+              "not_applicable"
+            ]
+          },
+          "score_impact": {
+            "type": "object",
+            "required": [
+              "direction",
+              "magnitude"
+            ],
+            "properties": {
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "positive",
+                  "negative",
+                  "neutral"
+                ]
+              },
+              "magnitude": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              "rationale": {
+                "type": "string"
+              }
+            }
+          },
+          "detector_source": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "required": [
+        "base_weights",
+        "applied_weights",
+        "category_scores",
+        "overall_score",
+        "verdict"
+      ],
+      "properties": {
+        "base_weights": {
+          "type": "object"
+        },
+        "applied_weights": {
+          "type": "object"
+        },
+        "category_scores": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "category",
+              "applicable",
+              "score",
+              "max_score",
+              "summary"
+            ],
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "applicable": {
+                "type": "boolean"
+              },
+              "score": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max_score": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "summary": {
+                "type": "string"
+              },
+              "key_findings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "overall_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "applicable_max_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "pass_with_distinction",
+            "conditional_pass",
+            "fail"
+          ]
+        },
+        "score_confidence": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
+      }
+    },
+    "hard_blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "reason",
+          "severity"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "high",
+              "critical"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "closure_requirements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "report_metadata": {
+      "type": "object",
+      "properties": {
+        "use_case_profile": {
+          "type": "string"
+        },
+        "output_profile": {
+          "type": "string"
+        },
+        "analysis_mode": {
+          "type": "string"
+        },
+        "compare_against": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
