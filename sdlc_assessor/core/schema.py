@@ -16,8 +16,26 @@ REQUIRED_TOP = {"repo_meta", "classification", "inventory", "findings", "scoring
 REQUIRED_SCORING = {"base_weights", "applied_weights", "category_scores", "overall_score", "verdict"}
 
 
-def load_evidence_schema(schema_path: str | Path = "docs/evidence_schema.json") -> dict:
-    return read_json(schema_path)
+def _default_schema_path() -> Path:
+    # Prefer local repo docs schema when available, then fall back to bundled package copy.
+    repo_docs = Path(__file__).resolve().parents[2] / "docs" / "evidence_schema.json"
+    if repo_docs.exists():
+        return repo_docs
+    bundled = Path(__file__).resolve().parent / "evidence_schema.json"
+    return bundled
+
+
+def load_evidence_schema(schema_path: str | Path | None = None) -> dict:
+    if schema_path is None:
+        path = _default_schema_path()
+    else:
+        path = Path(schema_path)
+        if not path.is_absolute() and not path.exists():
+            # Resolve relative to project/package roots for CLI stability across CWD.
+            candidate = Path(__file__).resolve().parents[2] / path
+            if candidate.exists():
+                path = candidate
+    return read_json(path)
 
 
 def _fallback_validate(evidence: dict) -> None:
@@ -33,7 +51,7 @@ def _fallback_validate(evidence: dict) -> None:
         raise ValueError(f"Schema validation failed at scoring: missing keys {sorted(missing_scoring)}")
 
 
-def validate_evidence_top_level(evidence: dict, schema_path: str | Path = "docs/evidence_schema.json") -> None:
+def validate_evidence_top_level(evidence: dict, schema_path: str | Path | None = None) -> None:
     if Draft202012Validator is None:
         _fallback_validate(evidence)
         return

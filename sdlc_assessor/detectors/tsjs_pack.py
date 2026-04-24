@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -17,8 +18,11 @@ def _iter_tsjs(repo_path: Path):
 
 def run_tsjs_detectors(repo_path: Path) -> list[dict]:
     findings: list[dict] = []
+    tsjs_files = list(_iter_tsjs(repo_path))
+    if not tsjs_files:
+        return findings
 
-    for p in _iter_tsjs(repo_path):
+    for p in tsjs_files:
         text = p.read_text(encoding="utf-8", errors="ignore")
 
         checks = [
@@ -47,7 +51,15 @@ def run_tsjs_detectors(repo_path: Path) -> list[dict]:
                 )
 
     tsconfig = repo_path / "tsconfig.json"
-    if not tsconfig.exists() or '"strict": true' not in tsconfig.read_text(encoding="utf-8", errors="ignore"):
+    strict_enabled = False
+    if tsconfig.exists():
+        try:
+            cfg = json.loads(tsconfig.read_text(encoding="utf-8", errors="ignore"))
+            strict_enabled = bool(cfg.get("compilerOptions", {}).get("strict", False))
+        except Exception:
+            strict_enabled = False
+
+    if not strict_enabled:
         findings.append(
             {
                 "category": "code_quality_contracts",

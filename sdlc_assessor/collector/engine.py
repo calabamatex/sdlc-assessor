@@ -34,9 +34,13 @@ def _detect_dependencies(repo_path: Path) -> tuple[int, int]:
 
     package_json = repo_path / "package.json"
     if package_json.exists():
-        data = json.loads(package_json.read_text(encoding="utf-8", errors="ignore"))
-        runtime += len(data.get("dependencies", {}))
-        dev += len(data.get("devDependencies", {}))
+        try:
+            data = json.loads(package_json.read_text(encoding="utf-8", errors="ignore"))
+            runtime += len(data.get("dependencies", {}))
+            dev += len(data.get("devDependencies", {}))
+        except json.JSONDecodeError:
+            runtime += 0
+            dev += 0
 
     pyproject = repo_path / "pyproject.toml"
     if pyproject.exists():

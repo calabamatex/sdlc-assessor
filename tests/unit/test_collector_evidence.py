@@ -1,5 +1,5 @@
 from sdlc_assessor.classifier.engine import classify_repo
-from sdlc_assessor.collector.engine import collect_evidence
+from sdlc_assessor.collector.engine import _detect_dependencies, collect_evidence
 from sdlc_assessor.core.io import write_json
 from sdlc_assessor.detectors.registry import DetectorRegistry
 
@@ -39,3 +39,10 @@ def test_evidence_detector_registry_plumbing_returns_list() -> None:
     assert "common" in registry.registered()
     findings = registry.run("tests/fixtures/fixture_python_basic")
     assert isinstance(findings, list)
+
+
+def test_detect_dependencies_ignores_invalid_package_json(tmp_path) -> None:
+    (tmp_path / "package.json").write_text("{invalid", encoding="utf-8")
+    runtime, dev = _detect_dependencies(tmp_path)
+    assert runtime == 0
+    assert dev == 0
