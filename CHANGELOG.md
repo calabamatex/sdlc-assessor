@@ -10,12 +10,34 @@ Nothing yet — see Roadmap below.
 
 ### Roadmap (not yet implemented)
 
-- Language packs for Go, Rust, Java, C#, Kotlin
-- Real SAST integration (`semgrep`, `bandit`, `eslint`, `cargo-audit`) feeding the common schema
+- Language packs for Java, C#, Kotlin (framework now exists; cheap follow-up via tree-sitter rule files)
+- Real SAST integration (`semgrep`, `bandit`, `eslint`, `cargo-audit`) feeding the common schema as an additive layer
 - `sdlc compare repo_a repo_b` mode
 - HTML renderer in addition to Markdown
 - Remote profile distribution (signed packs)
 - LLM-backed category narratives via the Anthropic API (deterministic path stays default)
+
+## [0.4.0] - 2026-04-25
+
+Second Phase-8 milestone: AST-driven multi-language detection. Five packs (Python stdlib + four tree-sitter) covering Python, Go, Rust, TypeScript, JSX, and JavaScript. ~40 detectable patterns vs v0.3.0's ~20.
+
+### Added
+
+- **SDLC-044: Tree-sitter framework.** New module `sdlc_assessor/detectors/treesitter/` with a generic query runner. Per-language packs are *data* — a list of `TreeSitterRule` entries pairing a tree-sitter S-expression query with schema metadata. Lazy import: when `tree-sitter` or `tree-sitter-language-pack` is missing, every tree-sitter pack returns `[]` with one warning per process; the CLI never crashes. New optional extra `[treesitter]` to install the deps; `[dev]` includes them automatically.
+- **SDLC-045: Go detector pack.** 7 patterns: `go_panic_call` (high), `go_unsafe_pointer` (high), `go_exec_command_shell` (critical), `go_fmt_println` (low), `go_recover_without_repanic` (medium), `go_init_with_side_effects` (low), `go_todo_or_fixme` (info).
+- **SDLC-046: Rust detector pack.** 7 patterns: `rust_unsafe_block` (high), `rust_unwrap_call` (medium), `rust_expect_call` (low), `rust_panic_macro` (high), `rust_dbg_macro` (low), `rust_println_macro` (info), `rust_transmute_call` (critical, supports both `mem::transmute(x)` and `mem::transmute::<A,B>(x)` forms).
+- **SDLC-047: TS/JS pack rewritten on tree-sitter.** Real AST queries replace the v0.2.0 regex-with-stripper. Same v0.2.0 patterns plus four new ones tree-sitter unlocks: `eval_usage` (critical), `function_constructor` (high), `inner_html_assignment` (high), `dangerously_set_inner_html` (high, JSX/TSX). `tsconfig.json` strict-mode + `extends`-chain handling preserved unchanged. `sdlc_assessor/detectors/tsjs_pack.py` is now a thin compat re-export to the new module.
+- **SDLC-048: Python pack expanded.** 6 new patterns on top of the v0.2.0 stdlib-AST baseline: `eval_or_exec` (critical), `pickle_load_untrusted` (high), `os_system_call` (high), `requests_verify_false` (high), `mutable_default_argument` (medium), `unsafe_sql_string` (high — detects string concat, f-string, and `.format()` inside `cursor.execute()`), `module_level_assert` (medium — only flags non-test files since `python -O` strips them).
+- **SDLC-049: Calibration coverage.** 4 new fixtures: `fixture_go_basic` / `fixture_go_panics` / `fixture_rust_basic` / `fixture_rust_unsafe`. `scripts/calibration_check.py` and `docs/calibration_targets.md` extended with bands for all four. 19 fixtures total, all in band.
+
+### Changed
+
+- `sdlc_assessor/detectors/registry.py` registers 7 packs (was 5): `common`, `python_pack`, `tsjs_pack`, `go_pack`, `rust_pack`, `dependency_hygiene`, `git_history`.
+- TS/JS finding line numbers may differ slightly between v0.3.0 and v0.4.0 because the AST traversal order differs from regex offsets. No semantic change.
+
+### Tests
+
+23 new tests across `tests/unit/test_detectors.py` covering the Python expansion (12 tests), Go/Rust/TS-tree-sitter packs (10 tests, guarded by `pytest.mark.skipif` if tree-sitter isn't installed), and the framework's no-op fallback (1 test). 131 total tests, up from 108 in v0.3.0.
 
 ## [0.3.0] - 2026-04-25
 
