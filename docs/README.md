@@ -11,6 +11,9 @@ Authoritative specs for the `sdlc-assessor` framework. Profile JSON data is no l
 - [`remediation_planner_spec.md`](remediation_planner_spec.md) — patch-safe remediation planner specification.
 - [`detector_pack_starter_spec.md`](detector_pack_starter_spec.md) — starter design for language-specific detector packs.
 - [`calibration_targets.md`](calibration_targets.md) — score bands the calibration script enforces in CI.
+- [`ANALYSIS.md`](ANALYSIS.md) — comprehensive analysis of the v0.1 implementation that motivated the v0.2.0 remediation. Read first if you're trying to understand *why* a given fix exists.
+- [`ACTION_PLAN.md`](ACTION_PLAN.md) — the 35-task remediation plan derived from the analysis. Each task carries `target_paths`, `anchor_guidance`, `test_requirements`, and `verification_commands`. SDLC-001..035 are all addressed in v0.2.0; see `CHANGELOG.md`.
+- [`RENAME_CHECKLIST.md`](RENAME_CHECKLIST.md) — runbook for the manual `SDLC-assesment` → `sdlc-assessor` repo rename (SDLC-034).
 
 ## Profile data (live at `sdlc_assessor/profiles/data/`)
 
