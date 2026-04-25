@@ -30,6 +30,7 @@ sdlc = "sdlc_assessor.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",
     "jsonschema>=4.20",
     "mypy>=1.10",
     "ruff>=0.5",
