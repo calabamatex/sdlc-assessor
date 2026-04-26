@@ -1,0 +1,15 @@
+# Synthetic lockfile so dependency_hygiene's lockfile_missing finding doesn't fire.
+# cargo-audit will treat this as a real lockfile when invoked; if cargo-audit
+# isn't on PATH the SAST adapter no-ops cleanly.
+version = 3
+
+[[package]]
+name = "fixture-rust-with-lockfile"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "serde"
+version = "1.0.0"

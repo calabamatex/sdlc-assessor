@@ -50,6 +50,13 @@ DEFAULT_PROFILES: list[tuple[str, str, str, str]] = [
     ("tests/fixtures/fixture_go_panics", "engineering_triage", "production", "service"),
     ("tests/fixtures/fixture_rust_basic", "engineering_triage", "prototype", "library"),
     ("tests/fixtures/fixture_rust_unsafe", "engineering_triage", "production", "library"),
+    ("tests/fixtures/fixture_rust_with_lockfile", "engineering_triage", "prototype", "library"),
+    ("tests/fixtures/fixture_java_basic", "engineering_triage", "prototype", "library"),
+    ("tests/fixtures/fixture_java_unsafe", "engineering_triage", "production", "service"),
+    ("tests/fixtures/fixture_csharp_basic", "engineering_triage", "prototype", "library"),
+    ("tests/fixtures/fixture_csharp_unsafe", "engineering_triage", "production", "service"),
+    ("tests/fixtures/fixture_kotlin_basic", "engineering_triage", "prototype", "library"),
+    ("tests/fixtures/fixture_kotlin_unsafe", "engineering_triage", "production", "service"),
 ]
 
 

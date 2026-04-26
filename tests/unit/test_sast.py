@@ -16,6 +16,7 @@ from unittest.mock import patch
 import pytest
 
 from sdlc_assessor.detectors.sast.bandit_adapter import BanditAdapter
+from sdlc_assessor.detectors.sast.cargo_audit_adapter import CargoAuditAdapter
 from sdlc_assessor.detectors.sast.eslint_adapter import ESLintAdapter
 from sdlc_assessor.detectors.sast.framework import (
     SASTAdapter,
@@ -31,9 +32,9 @@ from sdlc_assessor.detectors.sast.semgrep_adapter import SemgrepAdapter
 # ---------------------------------------------------------------------------
 
 
-def test_registered_adapters_includes_all_four() -> None:
+def test_registered_adapters_includes_all_five() -> None:
     names = [a.tool_name for a in registered_adapters()]
-    for required in ("bandit", "ruff", "eslint", "semgrep"):
+    for required in ("bandit", "ruff", "eslint", "semgrep", "cargo-audit"):
         assert required in names, f"missing adapter for {required}"
 
 
@@ -330,3 +331,88 @@ def test_run_sast_adapters_returns_list_when_no_tools_installed(tmp_path: Path) 
     with patch("sdlc_assessor.detectors.sast.framework.shutil.which", return_value=None):
         findings = run_sast_adapters(tmp_path)
     assert findings == []
+
+
+# ---------------------------------------------------------------------------
+# cargo-audit (SDLC-059)
+# ---------------------------------------------------------------------------
+
+
+def test_cargo_audit_should_run_requires_cargo_lock(tmp_path: Path) -> None:
+    (tmp_path / "lib.rs").write_text("fn main() {}\n", encoding="utf-8")
+    adapter = CargoAuditAdapter()
+    with patch("sdlc_assessor.detectors.sast.framework.shutil.which", return_value="/x/cargo-audit"):
+        # Without Cargo.lock → skip
+        assert adapter.should_run(tmp_path) is False
+        (tmp_path / "Cargo.lock").write_text("# lockfile", encoding="utf-8")
+        assert adapter.should_run(tmp_path) is True
+
+
+def test_cargo_audit_parse_emits_severity_and_advisory(tmp_path: Path) -> None:
+    adapter = CargoAuditAdapter()
+    payload = json.dumps(
+        {
+            "vulnerabilities": {
+                "list": [
+                    {
+                        "advisory": {
+                            "id": "RUSTSEC-2024-0001",
+                            "title": "Memory unsoundness in foo crate",
+                            "description": "Allows arbitrary memory read.",
+                            "severity": "critical",
+                            "aliases": ["CVE-2024-0001"],
+                        },
+                        "package": {"name": "foo", "version": "1.2.3"},
+                    },
+                    {
+                        "advisory": {
+                            "id": "RUSTSEC-2024-0002",
+                            "title": "Mild advisory",
+                            "description": "Low-severity issue.",
+                            "severity": "low",
+                            "aliases": [],
+                        },
+                        "package": {"name": "bar", "version": "0.1.0"},
+                    },
+                ]
+            }
+        }
+    )
+    out = adapter.parse_output(payload, "", 0)
+    assert len(out) == 2
+    crit = next(r for r in out if "0001" in r.subcategory)
+    assert crit.severity == "critical"
+    assert crit.category == "security_posture"
+    assert "cve:CVE-2024-0001" in crit.tags
+    low = next(r for r in out if "0002" in r.subcategory)
+    assert low.severity == "low"
+    assert low.category == "dependency_release_hygiene"
+
+
+def test_cargo_audit_parse_handles_warnings_block() -> None:
+    adapter = CargoAuditAdapter()
+    payload = json.dumps(
+        {
+            "warnings": {
+                "unmaintained": [
+                    {
+                        "advisory": {
+                            "id": "RUSTSEC-2024-9999",
+                            "title": "Crate unmaintained",
+                            "description": "No upstream maintainer.",
+                        },
+                        "package": {"name": "abandoned", "version": "0.1.0"},
+                    }
+                ]
+            }
+        }
+    )
+    out = adapter.parse_output(payload, "", 0)
+    assert len(out) == 1
+    assert out[0].subcategory == "cargo_audit_warning_unmaintained"
+    assert out[0].severity == "low"
+
+
+def test_cargo_audit_parse_handles_invalid_json() -> None:
+    assert CargoAuditAdapter().parse_output("not json", "", 0) == []
+    assert CargoAuditAdapter().parse_output("", "", 0) == []

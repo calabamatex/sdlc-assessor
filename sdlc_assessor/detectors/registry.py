@@ -9,7 +9,10 @@ from sdlc_assessor.detectors.dependency_hygiene import run_dependency_hygiene
 from sdlc_assessor.detectors.git_history import run_git_history_detectors
 from sdlc_assessor.detectors.python_pack import run_python_detectors
 from sdlc_assessor.detectors.sast import run_sast_adapters
+from sdlc_assessor.detectors.treesitter.csharp_pack import run_csharp_detectors
 from sdlc_assessor.detectors.treesitter.go_pack import run_go_detectors
+from sdlc_assessor.detectors.treesitter.java_pack import run_java_detectors
+from sdlc_assessor.detectors.treesitter.kotlin_pack import run_kotlin_detectors
 from sdlc_assessor.detectors.treesitter.rust_pack import run_rust_detectors
 from sdlc_assessor.detectors.treesitter.tsjs_pack import run_tsjs_detectors
 
@@ -22,6 +25,9 @@ class DetectorRegistry:
             "tsjs_pack",
             "go_pack",
             "rust_pack",
+            "java_pack",
+            "csharp_pack",
+            "kotlin_pack",
             "dependency_hygiene",
             "git_history",
             "sast",
@@ -38,6 +44,9 @@ class DetectorRegistry:
         findings.extend(run_tsjs_detectors(path))
         findings.extend(run_go_detectors(path))
         findings.extend(run_rust_detectors(path))
+        findings.extend(run_java_detectors(path))
+        findings.extend(run_csharp_detectors(path))
+        findings.extend(run_kotlin_detectors(path))
         findings.extend(run_dependency_hygiene(path))
         findings.extend(run_git_history_detectors(path))
         findings.extend(run_sast_adapters(path))

@@ -109,11 +109,14 @@ def _detect_language_packs(language_counts: dict[str, int]) -> list[str]:
     for suffix, pack in LANGUAGE_SUFFIXES.items():
         if language_counts.get(suffix, 0) > 0:
             pack_names.add(pack)
-    # Only include packs that are actually implemented today.
-    if "python" in pack_names:
-        packs.append("python")
-    if "typescript_javascript" in pack_names:
-        packs.append("typescript_javascript")
+    # Implemented packs: python (stdlib AST) + go/rust/typescript_javascript/
+    # java/csharp/kotlin (tree-sitter). Listed in classification output for
+    # accuracy; the registry runs them unconditionally and they no-op when
+    # the matching file extensions are absent.
+    pack_order = ("python", "typescript_javascript", "go", "rust", "java", "csharp", "kotlin")
+    for name in pack_order:
+        if name in pack_names:
+            packs.append(name)
     return packs
 
 
