@@ -10,13 +10,35 @@ Nothing yet — see Roadmap below.
 
 ### Roadmap (not yet implemented)
 
-- Language packs for Java, C#, Kotlin (framework exists; cheap follow-up via tree-sitter rule files)
-- `cargo-audit` SAST adapter for Rust dependency CVEs
-- `sdlc compare repo_a repo_b` mode
+- `sdlc compare repo_a repo_b` mode (diligence-grade side-by-side)
+- Cross-detector dedupe — when both a native pack and a SAST adapter flag the same line, current behaviour is to emit both findings; a future pass can collapse them
 - HTML renderer in addition to Markdown
 - Remote profile distribution (signed packs)
 - LLM-backed category narratives via the Anthropic API (deterministic path stays default)
-- Cross-detector dedupe — when both a native pack and a SAST adapter flag the same line, current behaviour is to emit both findings; a future pass can collapse them
+
+## [0.6.0] - 2026-04-26
+
+Fourth Phase-8 milestone: multi-language coverage completion. Java, C#, and Kotlin tree-sitter packs land as rule files on the v0.4.0 framework. cargo-audit joins the SAST adapter family for Rust dependency CVEs. With this release, the assessor covers seven major language families with native AST-driven detection plus five SAST adapters layered on top.
+
+### Added
+
+- **SDLC-056: Java tree-sitter pack.** 7 rules: `java_runtime_exec` (critical, security_posture), `java_class_forname` (medium, security_posture), `java_system_println` (low, code_quality_contracts), `java_print_stack_trace` (low), `java_empty_catch` (medium), `java_thread_sleep` (info), `java_todo_or_fixme` (info, documentation_truthfulness).
+- **SDLC-057: C# tree-sitter pack.** 6 rules: `csharp_process_start` (critical, security_posture), `csharp_unsafe_method` (high, security_posture), `csharp_console_writeline` (low, code_quality_contracts), `csharp_dynamic_type` (medium), `csharp_empty_catch` (medium), `csharp_todo_or_fixme` (info).
+- **SDLC-058: Kotlin tree-sitter pack.** 6 rules: `kotlin_not_null_assertion` (medium, code_quality_contracts), `kotlin_runtime_exec` (critical, security_posture), `kotlin_println_call` (low), `kotlin_todo_call` (info), `kotlin_empty_catch` (medium), `kotlin_todo_or_fixme` (info).
+- **SDLC-059: cargo-audit SAST adapter.** Wraps `cargo audit --json --file Cargo.lock`. Maps RustSec advisory severity (informational/low/medium/high/critical) to our schema. High/critical advisories route to `security_posture`; everything else to `dependency_release_hygiene`. Tags findings with `advisory:<id>` and `cve:<id>` when an alias exists. Also surfaces unmaintained/unsound/yanked-crate warnings under `cargo_audit_warning_<kind>`. `should_run` requires both the binary on PATH and a `Cargo.lock` in the repo.
+- 7 new fixtures: `fixture_java_basic`, `fixture_java_unsafe`, `fixture_csharp_basic`, `fixture_csharp_unsafe`, `fixture_kotlin_basic`, `fixture_kotlin_unsafe`, `fixture_rust_with_lockfile` (the last verifies `lockfile_missing` is silenced when a `Cargo.lock` is present).
+- 14 new tests in `tests/unit/test_detectors.py` (10 covering the three new packs) and `tests/unit/test_sast.py` (4 covering cargo-audit parsing).
+
+### Changed
+
+- Detector pack count: 8 → 11. Registry adds `java_pack`, `csharp_pack`, `kotlin_pack` between `rust_pack` and `dependency_hygiene`.
+- `language_pack_selection` in classifier output now includes `java`, `csharp`, and `kotlin` when matching files exist (previously only `python` and `typescript_javascript` were listed).
+- Calibration corpus: 19 → 26 fixtures, all in band.
+
+### Notes
+
+- Pattern surface continues to grow: ~40 in v0.5.0 → ~60 in v0.6.0 across native packs, plus SAST breadth via the five adapters.
+- Java/C#/Kotlin grammar versions in `tree-sitter-language-pack` 1.6.2 are stable on Linux x86_64 (the platform that surfaced v0.4.0's `tree-sitter-language-pack==1.6.2` pin issue). No additional pinning needed for v0.6.0.
 
 ## [0.5.0] - 2026-04-26
 
