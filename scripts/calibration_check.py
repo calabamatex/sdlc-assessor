@@ -68,6 +68,20 @@ TARGETS = [
      85, 99, {"pass_with_distinction", "pass"}, 0, 0),
     ("tests/fixtures/fixture_rust_unsafe", "engineering_triage", "production", "library",
      20, 55, {"conditional_pass", "fail"}, 1, None),
+    ("tests/fixtures/fixture_rust_with_lockfile", "engineering_triage", "prototype", "library",
+     85, 99, {"pass_with_distinction", "pass"}, 0, 0),
+    ("tests/fixtures/fixture_java_basic", "engineering_triage", "prototype", "library",
+     85, 99, {"pass_with_distinction", "pass"}, 0, 0),
+    ("tests/fixtures/fixture_java_unsafe", "engineering_triage", "production", "service",
+     20, 65, {"conditional_pass", "fail"}, 1, None),
+    ("tests/fixtures/fixture_csharp_basic", "engineering_triage", "prototype", "library",
+     85, 99, {"pass_with_distinction", "pass"}, 0, 0),
+    ("tests/fixtures/fixture_csharp_unsafe", "engineering_triage", "production", "service",
+     20, 65, {"conditional_pass", "fail"}, 1, None),
+    ("tests/fixtures/fixture_kotlin_basic", "engineering_triage", "prototype", "library",
+     85, 99, {"pass_with_distinction", "pass"}, 0, 0),
+    ("tests/fixtures/fixture_kotlin_unsafe", "engineering_triage", "production", "service",
+     20, 65, {"conditional_pass", "fail"}, 1, None),
 ]
 
 

@@ -31,6 +31,13 @@ Use cases are fixed at `engineering_triage` for these bands.
 | `fixture_go_panics` | production | service | 20 — 55 | conditional_pass / fail | ≥ 1 | — |
 | `fixture_rust_basic` | prototype | library | 85 — 99 | pass_with_distinction / pass | 0 | 0 |
 | `fixture_rust_unsafe` | production | library | 20 — 55 | conditional_pass / fail | ≥ 1 | — |
+| `fixture_rust_with_lockfile` | prototype | library | 85 — 99 | pass_with_distinction / pass | 0 | 0 |
+| `fixture_java_basic` | prototype | library | 85 — 99 | pass_with_distinction / pass | 0 | 0 |
+| `fixture_java_unsafe` | production | service | 20 — 65 | conditional_pass / fail | ≥ 1 | — |
+| `fixture_csharp_basic` | prototype | library | 85 — 99 | pass_with_distinction / pass | 0 | 0 |
+| `fixture_csharp_unsafe` | production | service | 20 — 65 | conditional_pass / fail | ≥ 1 | — |
+| `fixture_kotlin_basic` | prototype | library | 85 — 99 | pass_with_distinction / pass | 0 | 0 |
+| `fixture_kotlin_unsafe` | production | service | 20 — 65 | conditional_pass / fail | ≥ 1 | — |
 
 ## How to update
 

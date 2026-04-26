@@ -21,6 +21,9 @@ def test_detectors_registry_lists_registered_detectors() -> None:
         "tsjs_pack",
         "go_pack",
         "rust_pack",
+        "java_pack",
+        "csharp_pack",
+        "kotlin_pack",
         "dependency_hygiene",
         "git_history",
         "sast",
@@ -445,3 +448,126 @@ def test_treesitter_framework_no_op_when_deps_missing(monkeypatch, tmp_path: Pat
         detector_source="x",
     )
     assert findings == []
+
+
+# SDLC-056/057/058: Java + C# + Kotlin tree-sitter packs.
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_java_pack_detects_runtime_exec(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.java_pack import run_java_detectors
+
+    (tmp_path / "Demo.java").write_text(
+        'public class Demo { public static void main(String[] a) throws Exception '
+        '{ Runtime.getRuntime().exec("ls"); } }\n',
+        encoding="utf-8",
+    )
+    subcats = {f["subcategory"] for f in run_java_detectors(tmp_path)}
+    assert "java_runtime_exec" in subcats
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_java_pack_detects_system_println(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.java_pack import run_java_detectors
+
+    (tmp_path / "Demo.java").write_text(
+        'public class Demo { public static void main(String[] a) '
+        '{ System.out.println("hi"); System.err.printf("err"); } }\n',
+        encoding="utf-8",
+    )
+    assert "java_system_println" in {f["subcategory"] for f in run_java_detectors(tmp_path)}
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_java_pack_detects_empty_catch(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.java_pack import run_java_detectors
+
+    (tmp_path / "Demo.java").write_text(
+        'public class Demo { public static void main(String[] a) '
+        '{ try { } catch (Exception e) {} } }\n',
+        encoding="utf-8",
+    )
+    assert "java_empty_catch" in {f["subcategory"] for f in run_java_detectors(tmp_path)}
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_java_pack_clean_file_yields_no_findings(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.java_pack import run_java_detectors
+
+    (tmp_path / "Clean.java").write_text(
+        'public class Clean { public int add(int a, int b) { return a + b; } }\n',
+        encoding="utf-8",
+    )
+    assert run_java_detectors(tmp_path) == []
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_csharp_pack_detects_process_start_and_unsafe(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.csharp_pack import run_csharp_detectors
+
+    (tmp_path / "Demo.cs").write_text(
+        "using System;\nusing System.Diagnostics;\n"
+        "public class Demo { public unsafe void Bad() { Process.Start(\"x\"); } }\n",
+        encoding="utf-8",
+    )
+    subcats = {f["subcategory"] for f in run_csharp_detectors(tmp_path)}
+    assert "csharp_process_start" in subcats
+    assert "csharp_unsafe_method" in subcats
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_csharp_pack_detects_dynamic_and_console(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.csharp_pack import run_csharp_detectors
+
+    (tmp_path / "Demo.cs").write_text(
+        "using System;\npublic class Demo { public void F() { dynamic d = 42; "
+        "Console.WriteLine(d); } }\n",
+        encoding="utf-8",
+    )
+    subcats = {f["subcategory"] for f in run_csharp_detectors(tmp_path)}
+    assert "csharp_dynamic_type" in subcats
+    assert "csharp_console_writeline" in subcats
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_kotlin_pack_detects_not_null_assertion(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.kotlin_pack import run_kotlin_detectors
+
+    (tmp_path / "Demo.kt").write_text(
+        "fun f(s: String?) { val n = s!!.length }\n",
+        encoding="utf-8",
+    )
+    assert "kotlin_not_null_assertion" in {f["subcategory"] for f in run_kotlin_detectors(tmp_path)}
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_kotlin_pack_detects_runtime_exec_and_todo(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.kotlin_pack import run_kotlin_detectors
+
+    (tmp_path / "Demo.kt").write_text(
+        'fun f() { Runtime.getRuntime().exec("ls"); TODO("not impl") }\n',
+        encoding="utf-8",
+    )
+    subcats = {f["subcategory"] for f in run_kotlin_detectors(tmp_path)}
+    assert "kotlin_runtime_exec" in subcats
+    assert "kotlin_todo_call" in subcats
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_kotlin_pack_detects_empty_catch(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.kotlin_pack import run_kotlin_detectors
+
+    (tmp_path / "Demo.kt").write_text(
+        "fun f() { try { } catch (e: Exception) {} }\n", encoding="utf-8"
+    )
+    assert "kotlin_empty_catch" in {f["subcategory"] for f in run_kotlin_detectors(tmp_path)}
+
+
+@pytest.mark.skipif(not _TS_DEPS_OK, reason="tree-sitter not installed")
+def test_kotlin_pack_clean_file_yields_no_findings(tmp_path: Path) -> None:
+    from sdlc_assessor.detectors.treesitter.kotlin_pack import run_kotlin_detectors
+
+    (tmp_path / "Clean.kt").write_text(
+        "fun add(a: Int, b: Int): Int = a + b\n", encoding="utf-8"
+    )
+    assert run_kotlin_detectors(tmp_path) == []
