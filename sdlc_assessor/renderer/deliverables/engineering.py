@@ -38,18 +38,10 @@ from sdlc_assessor.renderer.deliverables.base import (
     score_band,
     top_findings,
 )
+from sdlc_assessor.renderer.deliverables._vocab import ENGINEERING_VOCAB
 from sdlc_assessor.renderer.persona import narrate_for_persona
 
-_CATEGORY_LABEL = {
-    "architecture_design": "Architecture",
-    "code_quality_contracts": "Code quality",
-    "testing_quality_gates": "Testing",
-    "security_posture": "Security",
-    "dependency_release_hygiene": "Dependencies",
-    "documentation_truthfulness": "Documentation",
-    "maintainability_operability": "Maintainability",
-    "reproducibility_research_rigor": "Reproducibility",
-}
+_VOCAB = ENGINEERING_VOCAB
 
 _EFFORT_VALUE = {"XS": 0.1, "S": 0.3, "M": 0.55, "L": 0.8, "XL": 0.95}
 
@@ -113,7 +105,7 @@ def build(scored: dict, profile: dict) -> Deliverable:
         high=high,
     )
 
-    return Deliverable(
+    deliverable = Deliverable(
         use_case="engineering_triage",
         kind="engineering_health",
         cover=cover,
@@ -122,6 +114,9 @@ def build(scored: dict, profile: dict) -> Deliverable:
         appendix=_appendix_for(scored),
         persona_blocks=blocks,
     )
+    from sdlc_assessor.renderer.deliverables._integrate import apply_depth_pass
+
+    return apply_depth_pass(deliverable, scored=scored, use_case_profile=profile)
 
 
 # ---------------------------------------------------------------------------
@@ -186,20 +181,17 @@ def _capability_radar_section(scored: dict) -> Section:
             continue
         axes.append(
             (
-                _CATEGORY_LABEL.get(c.get("category", ""), str(c.get("category", "")).replace("_", " ").title()),
+                _VOCAB.category_labels.get(c.get("category", ""))
+                or str(c.get("category", "")).replace("_", " ").title(),
                 int(c.get("score", 0) or 0),
                 max_score,
             )
         )
-    svg = category_radar(axes=axes) if axes else ""
+    svg = category_radar(axes=axes, title=_VOCAB.radar_title) if axes else ""
     return Section(
         title="1. Health by category",
         kind="chart",
-        summary=(
-            "Score per applicable category. Use this as the at-a-glance "
-            "diagnostic — categories with the smallest filled radius are "
-            "the load-bearing risks."
-        ),
+        summary=_VOCAB.radar_caption,
         chart_svg=svg,
         data={"axes": axes},
     )
@@ -309,14 +301,17 @@ def _effort_impact_section(scored: dict) -> Section:
                     severity=sev,
                 )
             )
-    svg = effort_impact_matrix(tasks=points)
+    svg = effort_impact_matrix(
+        tasks=points,
+        title=_VOCAB.effort_title,
+        x_label=_VOCAB.effort_x,
+        y_label=_VOCAB.effort_y,
+        quadrant_labels=_VOCAB.effort_quadrants,
+    )
     return Section(
         title="4. Effort × impact triage",
         kind="chart",
-        summary=(
-            "Tasks plotted by engineering effort (x) and expected score lift "
-            "(y). Upper-left is the DO-FIRST quadrant; lower-right is DEFER."
-        ),
+        summary=_VOCAB.effort_caption,
         chart_svg=svg,
         data={"point_count": len(points)},
     )
@@ -353,14 +348,15 @@ def _phased_remediation_section(scored: dict, *, current_score: int) -> Section:
     for key, delta in sorted(extras, key=lambda kv: -kv[1])[:2]:
         phases.append(PhaseLift(label=str(key).replace("_", " ").title(), delta=delta))
 
-    svg = score_lift_trajectory(current_score=current_score, phases=phases)
+    svg = score_lift_trajectory(
+        current_score=current_score,
+        phases=phases,
+        title=_VOCAB.trajectory_title,
+    )
     return Section(
         title="5. Phased remediation trajectory",
         kind="chart",
-        summary=(
-            "Cumulative projected score after each remediation phase. Each "
-            "phase is sized by the score lift its tasks recover."
-        ),
+        summary=_VOCAB.trajectory_caption,
         chart_svg=svg,
         data={"phases": [{"label": p.label, "delta": p.delta} for p in phases]},
     )

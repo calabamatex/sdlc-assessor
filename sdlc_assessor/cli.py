@@ -13,7 +13,7 @@ from sdlc_assessor.compare.markdown import render_comparison_markdown
 from sdlc_assessor.core.io import read_json, write_json
 from sdlc_assessor.remediation.markdown import render_remediation_markdown
 from sdlc_assessor.remediation.planner import build_remediation_plan
-from sdlc_assessor.renderer.html import render_html_report
+from sdlc_assessor.renderer.deliverable_html import render_html_report
 from sdlc_assessor.renderer.markdown import render_markdown_report
 from sdlc_assessor.scorer.engine import score_evidence
 
@@ -101,6 +101,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run.add_argument("--llm-model", default=None, help="Anthropic model id")
+    run.add_argument(
+        "--narrator",
+        default="deterministic",
+        choices=["deterministic", "llm", "both"],
+        help=(
+            "Which narrative voice to render in the report body. `deterministic` (default) "
+            "uses only the rule-based persona narrative blocks. `llm` replaces them with "
+            "Claude-authored prose. `both` renders the two side-by-side. `llm` and `both` "
+            "require ANTHROPIC_API_KEY; both gracefully fall back to deterministic when the "
+            "key is absent."
+        ),
+    )
 
     compare = sub.add_parser(
         "compare",
@@ -264,15 +276,23 @@ def main(argv: list[str] | None = None) -> int:
             use_llm_narrator=getattr(args, "narrate_with_llm", False),
             llm_model=getattr(args, "llm_model", None),
         )
+        # Build the remediation plan first so it can be attached to scored
+        # before rendering. This lets the deliverable layer's gap analysis
+        # and exec summary cite real per-phase projections (0.11.0 depth pass).
+        remediation = build_remediation_plan(scored)
+        scored["remediation_plan"] = remediation
+
         scored_path = out_dir / "scored.json"
         write_json(scored_path, scored)
 
+        narrator = getattr(args, "narrator", "deterministic")
         if args.format in ("markdown", "both"):
             (out_dir / "report.md").write_text(render_markdown_report(scored), encoding="utf-8")
         if args.format in ("html", "both"):
-            (out_dir / "report.html").write_text(render_html_report(scored), encoding="utf-8")
+            (out_dir / "report.html").write_text(
+                render_html_report(scored, narrator=narrator), encoding="utf-8"
+            )
 
-        remediation = build_remediation_plan(scored)
         remediation_md = render_remediation_markdown(remediation)
         (out_dir / "remediation.md").write_text(remediation_md, encoding="utf-8")
         return 0

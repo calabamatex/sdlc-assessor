@@ -45,18 +45,10 @@ from sdlc_assessor.renderer.deliverables.base import (
     score_band,
     top_findings,
 )
+from sdlc_assessor.renderer.deliverables._vocab import ACQUISITION_VOCAB
 from sdlc_assessor.renderer.persona import narrate_for_persona
 
-_CATEGORY_LABEL = {
-    "architecture_design": "Architecture",
-    "code_quality_contracts": "Code quality",
-    "testing_quality_gates": "Testing",
-    "security_posture": "Security",
-    "dependency_release_hygiene": "Dependency hygiene",
-    "documentation_truthfulness": "Documentation",
-    "maintainability_operability": "Maintainability",
-    "reproducibility_research_rigor": "Reproducibility",
-}
+_VOCAB = ACQUISITION_VOCAB
 
 
 def build(scored: dict, profile: dict) -> Deliverable:
@@ -142,7 +134,7 @@ def build(scored: dict, profile: dict) -> Deliverable:
         high=high,
     )
 
-    return Deliverable(
+    deliverable = Deliverable(
         use_case="acquisition_diligence",
         kind="acquisition_memo",
         cover=cover,
@@ -151,6 +143,9 @@ def build(scored: dict, profile: dict) -> Deliverable:
         appendix=_appendix_for(scored),
         persona_blocks=blocks,
     )
+    from sdlc_assessor.renderer.deliverables._integrate import apply_depth_pass
+
+    return apply_depth_pass(deliverable, scored=scored, use_case_profile=profile)
 
 
 # ---------------------------------------------------------------------------
@@ -193,23 +188,46 @@ def _rationale_sentence(verdict: str, *, score: int, critical: int, high: int) -
 
 
 def _cover_facts(scored: dict) -> list[tuple[str, str]]:
+    """Acquisition-side facts: inheritance scale, dep surface, on-call risk, KT risk."""
     inv = scored.get("inventory") or {}
     cls = scored.get("classification") or {}
+    git = (scored.get("repo_meta") or {}).get("git_summary") or {}
     facts: list[tuple[str, str]] = []
+
     archetype = (cls.get("repo_archetype") or "unknown").replace("_", " ")
-    facts.append(("Archetype", archetype))
+    facts.append(("Asset class", archetype))
+
+    loc = inv.get("source_loc")
+    files = inv.get("source_files")
     facts.append(
-        ("Source files / LOC", f"{inv.get('source_files', 'n/a')} files · {inv.get('source_loc', 'n/a')} LOC")
+        ("Codebase you'd inherit", f"{loc:,} LOC across {files} files" if isinstance(loc, int) else f"{loc} LOC · {files} files")
     )
-    facts.append(
-        ("Test files / cases", f"{inv.get('test_files', 'n/a')} files · {inv.get('estimated_test_cases', 'n/a')} cases")
-    )
-    facts.append(
-        ("Workflows / jobs", f"{inv.get('workflow_files', 'n/a')} files · {inv.get('workflow_jobs', 'n/a')} jobs")
-    )
+
     deps = inv.get("runtime_dependencies", "n/a")
-    dev_deps = inv.get("dev_dependencies", "n/a")
-    facts.append(("Dependencies", f"{deps} runtime · {dev_deps} dev"))
+    facts.append(
+        ("Runtime dep surface", f"{deps} packages — vetting cost on close" if deps != "n/a" else "n/a")
+    )
+
+    test_files = inv.get("test_files") or 0
+    src_files = inv.get("source_files") or 0
+    if isinstance(test_files, int) and isinstance(src_files, int) and src_files > 0:
+        ratio = test_files / src_files
+        facts.append(
+            ("Test trust signal", f"{ratio:.0%} test/source — {'thin' if ratio < 0.2 else 'workable'}")
+        )
+
+    bus = git.get("estimated_bus_factor") or git.get("bus_factor")
+    contributors = git.get("contributor_count") or git.get("unique_authors")
+    if bus is not None or contributors is not None:
+        bus_text = (
+            "bus factor 1 — single point of failure" if str(bus) in {"1", "1.0"}
+            else f"bus factor {bus or 'n/a'}"
+        )
+        facts.append(("Knowledge-transfer risk", f"{contributors or 'n/a'} contrib · {bus_text}"))
+
+    network = "internet-facing" if cls.get("network_exposure") else "internal-only"
+    facts.append(("Operational surface", network))
+
     return facts
 
 
@@ -252,22 +270,19 @@ def _what_we_are_buying_section(scored: dict) -> Section:
     cats = category_scores_list(scored)
     axes = [
         (
-            _CATEGORY_LABEL.get(c.get("category", ""), str(c.get("category", "")).replace("_", " ").title()),
+            _VOCAB.category_labels.get(c.get("category", ""))
+            or str(c.get("category", "")).replace("_", " ").title(),
             int(c.get("score", 0) or 0),
             int(c.get("max_score", 0) or 0),
         )
         for c in cats
         if c.get("applicable", True) and int(c.get("max_score", 0) or 0) > 0
     ]
-    svg = category_radar(axes=axes) if axes else ""
-    summary = (
-        "Capability spread across the eight assessment categories. Categories "
-        "marked not-applicable for this archetype are excluded from the chart."
-    )
+    svg = category_radar(axes=axes, title=_VOCAB.radar_title) if axes else ""
     return Section(
         title="2. What you're acquiring",
         kind="chart",
-        summary=summary,
+        summary=_VOCAB.radar_caption,
         chart_svg=svg,
         data={"axes": axes},
     )
@@ -302,15 +317,17 @@ def _risk_matrix_section(scored: dict) -> Section:
                 note=(f.get("statement") or "")[:140],
             )
         )
-    svg = risk_matrix(risks=points)
+    svg = risk_matrix(
+        risks=points,
+        title=_VOCAB.risk_title,
+        x_label=_VOCAB.risk_x,
+        y_label=_VOCAB.risk_y,
+        quadrant_labels=_VOCAB.risk_quadrants,
+    )
     return Section(
         title="3. Integration risk surface",
         kind="chart",
-        summary=(
-            "Top production findings plotted against likelihood (confidence) "
-            "and impact (severity weighted by deduction magnitude). Items in "
-            "the upper-right quadrant drive most of the integration cost."
-        ),
+        summary=_VOCAB.risk_caption,
         chart_svg=svg,
         data={"point_count": len(points)},
     )
@@ -333,14 +350,17 @@ def _swot_section(scored: dict, blocks: list) -> Section:
         if max_score <= 0:
             continue
         ratio = score / max_score
-        label = _CATEGORY_LABEL.get(c.get("category", ""), str(c.get("category", "")).replace("_", " ").title())
+        label = (
+            _VOCAB.category_labels.get(c.get("category", ""))
+            or str(c.get("category", "")).replace("_", " ").title()
+        )
         if ratio >= 0.9:
             strengths.append(
-                f"**{label}** scored {score}/{max_score} — {c.get('summary') or 'category retained near-full points.'}"
+                f"**{label}** scores {score}/{max_score} — you'd inherit this in good shape."
             )
         elif ratio < 0.5:
             weaknesses.append(
-                f"**{label}** scored {score}/{max_score} — {c.get('summary') or 'category lost majority of points.'}"
+                f"**{label}** scores {score}/{max_score} — direct cost on day one."
             )
 
     if not strengths:
