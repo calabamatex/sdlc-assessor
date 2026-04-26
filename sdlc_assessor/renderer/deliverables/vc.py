@@ -42,18 +42,10 @@ from sdlc_assessor.renderer.deliverables.base import (
     score_band,
     top_findings,
 )
+from sdlc_assessor.renderer.deliverables._vocab import VC_VOCAB
 from sdlc_assessor.renderer.persona import narrate_for_persona
 
-_CATEGORY_LABEL = {
-    "architecture_design": "Architecture",
-    "code_quality_contracts": "Code quality",
-    "testing_quality_gates": "Testing",
-    "security_posture": "Security",
-    "dependency_release_hygiene": "Dependencies",
-    "documentation_truthfulness": "Documentation",
-    "maintainability_operability": "Maintainability",
-    "reproducibility_research_rigor": "Reproducibility",
-}
+_VOCAB = VC_VOCAB
 
 # Plausible "sufficient" capability ratios by category for an early-stage
 # product company shopping a VC round. Used as the baseline polygon on the
@@ -142,7 +134,7 @@ def build(scored: dict, profile: dict) -> Deliverable:
         high=high,
     )
 
-    return Deliverable(
+    deliverable = Deliverable(
         use_case="vc_diligence",
         kind="vc_thesis",
         cover=cover,
@@ -151,6 +143,9 @@ def build(scored: dict, profile: dict) -> Deliverable:
         appendix=_appendix_for(scored),
         persona_blocks=blocks,
     )
+    from sdlc_assessor.renderer.deliverables._integrate import apply_depth_pass
+
+    return apply_depth_pass(deliverable, scored=scored, use_case_profile=profile)
 
 
 # ---------------------------------------------------------------------------
@@ -190,15 +185,50 @@ def _rationale(verdict: str, score: int, critical: int, high: int) -> str:
 
 
 def _cover_facts(scored: dict, blocks: list) -> list[tuple[str, str]]:
+    """Investor-side facts: shipping velocity, claim-vs-evidence, vendor risk."""
     inv = scored.get("inventory") or {}
+    git = (scored.get("repo_meta") or {}).get("git_summary") or {}
     facts: list[tuple[str, str]] = []
-    facts.append(("Technical scale", f"{inv.get('source_loc', 'n/a')} LOC · {inv.get('source_files', 'n/a')} files"))
-    facts.append(("Test coverage signal", f"{inv.get('test_files', 'n/a')} test files"))
-    facts.append(("CI maturity", f"{inv.get('workflow_files', 'n/a')} workflows · {inv.get('workflow_jobs', 'n/a')} jobs"))
+
+    loc = inv.get("source_loc")
+    files = inv.get("source_files")
+    facts.append(
+        ("System size (substantiation)", f"{loc:,} LOC · {files} files" if isinstance(loc, int) else f"{loc} LOC · {files} files")
+    )
+
+    contributors = git.get("contributor_count") or git.get("unique_authors")
+    commits = git.get("commit_count") or inv.get("commit_count")
+    velocity_text = f"{commits} commits · {contributors or 'n/a'} contributors"
+    facts.append(("Founder shipping velocity", velocity_text))
+
+    runtime_deps = inv.get("runtime_dependencies", "n/a")
+    facts.append(
+        (
+            "Vendor concentration",
+            f"{runtime_deps} runtime deps — moat bypass risk if any is solo-vendor",
+        )
+    )
+
+    workflow_files = inv.get("workflow_files", 0) or 0
+    test_files = inv.get("test_files", 0) or 0
+    if workflow_files == 0 or test_files == 0:
+        ops_text = "thin — claim 'we ship like a real company' is partial"
+    elif workflow_files >= 2 and test_files >= 5:
+        ops_text = f"{workflow_files} workflows · {test_files} test files — operations look real"
+    else:
+        ops_text = f"{workflow_files} workflows · {test_files} test files — middle of the road"
+    facts.append(("Ops maturity (proof of execution)", ops_text))
+
     overclaim = sum(1 for b in blocks if "overclaim" in (b.key or "").lower())
     if overclaim:
-        facts.append(("Overclaim flags", f"{overclaim} narrative block(s) raised"))
-    facts.append(("Critical blockers", str(sum(1 for b in scored.get("hard_blockers") or [] if b.get("severity") == "critical"))))
+        facts.append(("Overclaim flags", f"{overclaim} pitch claim(s) under-substantiated"))
+
+    crit_count = sum(
+        1 for b in scored.get("hard_blockers") or [] if b.get("severity") == "critical"
+    )
+    if crit_count:
+        facts.append(("Deal-breakers in the code", f"{crit_count} critical blocker(s)"))
+
     return facts
 
 
@@ -364,22 +394,23 @@ def _moat_radar_section(scored: dict) -> Section:
         category = c.get("category", "")
         axes.append(
             (
-                _CATEGORY_LABEL.get(category, str(category).replace("_", " ").title()),
+                _VOCAB.category_labels.get(category)
+                or str(category).replace("_", " ").title(),
                 int(c.get("score", 0) or 0),
                 max_score,
             )
         )
         baseline.append(_VC_BASELINE.get(category, 0.55))
 
-    svg = category_radar(axes=axes, baseline=baseline) if axes else ""
+    svg = (
+        category_radar(axes=axes, baseline=baseline, title=_VOCAB.radar_title)
+        if axes
+        else ""
+    )
     return Section(
         title="2. Technical-moat support",
         kind="chart",
-        summary=(
-            "Capability spread (filled polygon) versus a typical-VC-bar baseline "
-            "(dashed). Categories where the asset clears the baseline are the "
-            "thesis's load-bearing strengths; those that fall short need founder Q&A."
-        ),
+        summary=_VOCAB.radar_caption,
         chart_svg=svg,
         data={"axes": axes, "baseline": baseline},
     )
@@ -455,15 +486,17 @@ def _risk_concentration_section(scored: dict) -> Section:
                 note=(f.get("statement") or "")[:140],
             )
         )
-    svg = risk_matrix(risks=points)
+    svg = risk_matrix(
+        risks=points,
+        title=_VOCAB.risk_title,
+        x_label=_VOCAB.risk_x,
+        y_label=_VOCAB.risk_y,
+        quadrant_labels=_VOCAB.risk_quadrants,
+    )
     return Section(
         title="4. Risk concentration",
         kind="chart",
-        summary=(
-            "Findings plotted by likelihood (confidence) and impact (severity × "
-            "deduction magnitude). Concentration in the upper-right quadrant "
-            "is the thesis's downside scenario."
-        ),
+        summary=_VOCAB.risk_caption,
         chart_svg=svg,
         data={"point_count": len(points)},
     )

@@ -36,7 +36,10 @@ from sdlc_assessor.renderer.deliverables.base import (
     register_deliverable_builder,
     score_band,
 )
+from sdlc_assessor.renderer.deliverables._vocab import REMEDIATION_VOCAB
 from sdlc_assessor.renderer.persona import narrate_for_persona
+
+_VOCAB = REMEDIATION_VOCAB
 
 
 def build(scored: dict, profile: dict) -> Deliverable:
@@ -115,7 +118,7 @@ def build(scored: dict, profile: dict) -> Deliverable:
         ],
     )
 
-    return Deliverable(
+    deliverable = Deliverable(
         use_case="remediation_agent",
         kind="remediation_plan",
         cover=cover,
@@ -124,6 +127,9 @@ def build(scored: dict, profile: dict) -> Deliverable:
         appendix=_appendix_for(scored),
         persona_blocks=blocks,
     )
+    from sdlc_assessor.renderer.deliverables._integrate import apply_depth_pass
+
+    return apply_depth_pass(deliverable, scored=scored, use_case_profile=profile)
 
 
 # ---------------------------------------------------------------------------
@@ -306,14 +312,15 @@ def _trajectory_section(scored: dict, *, current_score: int) -> Section:
     for key, label in phase_order:
         if key in deltas and deltas[key] > 0:
             phases.append(PhaseLift(label=label, delta=deltas[key]))
-    svg = score_lift_trajectory(current_score=current_score, phases=phases)
+    svg = score_lift_trajectory(
+        current_score=current_score,
+        phases=phases,
+        title=_VOCAB.trajectory_title,
+    )
     return Section(
         title="4. Score-lift trajectory",
         kind="chart",
-        summary=(
-            "Projected score after each phase. Treat as a calibration target — "
-            "real-world deltas should land within 25% of these projections."
-        ),
+        summary=_VOCAB.trajectory_caption,
         chart_svg=svg,
         data={"phases": [{"label": p.label, "delta": p.delta} for p in phases]},
     )
