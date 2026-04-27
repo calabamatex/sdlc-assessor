@@ -177,6 +177,35 @@ def _codeowners_match(rel: str, pattern: str) -> bool:
     return fnmatch.fnmatch(rel, pattern.rstrip("/") + "/*")
 
 
+def _tag_count(repo_path: Path) -> int:
+    """Count git tags in the repo (covers semver, release tags, etc.).
+
+    Used by the RSF D5.4 scorer to assess release cadence — `tag_count == 0`
+    is the level-0 anchor ("No releases or tagged versions").
+    """
+    out = _run_git(repo_path, "tag", "--list")
+    if out is None:
+        return 0
+    return sum(1 for line in out.splitlines() if line.strip())
+
+
+def _commits_in_last_days(repo_path: Path, days: int) -> int:
+    """Count commits in the last ``days`` days on the current branch.
+
+    Used by the RSF D7.2 scorer to differentiate "no commits in 6 months"
+    (level 0) from sustained activity (levels 2+).
+    """
+    out = _run_git(
+        repo_path,
+        "log",
+        f"--since={days} days ago",
+        "--pretty=oneline",
+    )
+    if out is None:
+        return 0
+    return sum(1 for line in out.splitlines() if line.strip())
+
+
 def collect_git_summary(repo_path: Path) -> dict | None:
     """Return the optional ``repo_meta.git_summary`` payload, or None if not a repo."""
     if not _is_git_repo(repo_path):
@@ -195,6 +224,12 @@ def collect_git_summary(repo_path: Path) -> dict | None:
         "top_authors": top_authors,
         "codeowners_present": codeowners_path is not None,
         "codeowners_coverage": round(codeowners_coverage, 3),
+        # Real-signal additions for the RSF D5.4 + D7.2 scorers.
+        "tag_count": _tag_count(repo_path),
+        "commits_last_30_days": _commits_in_last_days(repo_path, 30),
+        "commits_last_90_days": _commits_in_last_days(repo_path, 90),
+        "commits_last_180_days": _commits_in_last_days(repo_path, 180),
+        "commits_last_365_days": _commits_in_last_days(repo_path, 365),
     }
 
 

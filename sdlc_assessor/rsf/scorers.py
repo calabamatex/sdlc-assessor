@@ -633,7 +633,16 @@ def score_d5_3(scored: dict, repo_path: Path) -> CriterionScore:
 
 
 def score_d5_4(scored: dict, repo_path: Path) -> CriterionScore:
-    """D5.4 Release cadence and tagging."""
+    """D5.4 Release cadence and tagging.
+
+    RSF anchors:
+      0: No releases or untagged releases.
+      1: Releases tagged but irregular; no notes.
+      2: SemVer tagging; release notes manual.
+      3: SemVer + automated release notes; release branches as needed.
+      4: Release-please / changesets / semantic-release automation.
+      5: Above + release attestations (SLSA provenance attached).
+    """
     inv = _inventory(scored)
     git = _git_summary(scored)
     tag_count = int(inv.get("tag_count") or git.get("tag_count") or 0)
@@ -644,23 +653,63 @@ def score_d5_4(scored: dict, repo_path: Path) -> CriterionScore:
             criterion_id="D5.4",
             value=0,
             evidence=[f"tag_count={tag_count}", f"release_count={release_count}"],
-            rationale="No releases or tagged versions.",
+            rationale="No releases or untagged releases (RSF D5.4 level 0).",
         )
-    has_release_workflow = bool(_workflows_mention(
+
+    has_release_automation = bool(_workflows_mention(
         repo_path, "release-please", "semantic-release", "changesets",
     ))
+    has_slsa_provenance = bool(_workflows_mention(
+        repo_path, "slsa-framework", "slsa-generator",
+    ))
     evidence = [f"tag_count={tag_count}", f"release_count={release_count}"]
-    if has_release_workflow:
+    if has_release_automation:
         evidence.append("release-automation workflow detected")
+    if has_slsa_provenance:
+        evidence.append("SLSA provenance workflow detected")
+
+    # Level 4: release automation present.
+    if has_release_automation and has_slsa_provenance:
+        return CriterionScore(
+            criterion_id="D5.4",
+            value=5,
+            evidence=evidence,
+            rationale=(
+                "Release automation + SLSA provenance attestations "
+                "(RSF D5.4 level 5)."
+            ),
+        )
+    if has_release_automation:
+        return CriterionScore(
+            criterion_id="D5.4",
+            value=4,
+            evidence=evidence,
+            rationale=(
+                "Release-please / semantic-release / changesets automation "
+                "detected (RSF D5.4 level 4)."
+            ),
+        )
+
+    # Without automation but with multiple tags, score 1 ("tagged but irregular").
+    # Distinguishing level 2+ (SemVer adherence + release notes) requires
+    # content analysis we don't do — return level 1 conservatively.
+    if tag_count >= 1:
+        return CriterionScore(
+            criterion_id="D5.4",
+            value=1,
+            evidence=evidence,
+            rationale=(
+                f"{tag_count} tag(s) present; releases tagged but no automation "
+                "detected. SemVer adherence + release-note structure (levels "
+                "2–3) require content analysis. RSF D5.4 level 1."
+            ),
+        )
+
     return CriterionScore(
         criterion_id="D5.4",
         value=UNVERIFIED,
         evidence=evidence,
-        rationale=(
-            "Tags / releases present. SemVer adherence, automated release notes, "
-            "and release attestations (levels 2–5) require release-channel "
-            "inspection this assessor does not currently do."
-        ),
+        rationale="tag_count and release_count both unknown.",
     )
 
 
@@ -833,121 +882,239 @@ def score_d6_4(scored: dict, repo_path: Path) -> CriterionScore:
 
 
 def score_d7_1(scored: dict, repo_path: Path) -> CriterionScore:
-    """D7.1 Bus factor / knowledge concentration."""
+    """D7.1 Bus factor / knowledge concentration.
+
+    RSF v1.0 D7.1 anchors are *literally* about author share — level 0
+    is "Single contributor authored >80% of code; no co-maintainers."
+    Read ``top_authors`` directly (most precise signal); fall back to
+    ``bus_factor`` only when top_authors isn't available.
+    """
     git = _git_summary(scored)
-    bus = git.get("estimated_bus_factor") or git.get("bus_factor")
-    contributors = (
-        git.get("contributor_count")
-        or git.get("unique_authors")
-        or git.get("active_contributors")
-    )
+    top_authors = git.get("top_authors") or []
     has_codeowners = _find_first(repo_path, _CODEOWNERS_CANDIDATES) is not None
 
-    if bus is None:
+    # Derive a top-author share if available — most precise per the RSF anchors.
+    leading_share: float | None = None
+    if top_authors and isinstance(top_authors, list):
+        first = top_authors[0]
+        if isinstance(first, dict):
+            try:
+                leading_share = float(first.get("share", 0.0))
+            except (TypeError, ValueError):
+                leading_share = None
+
+    contributor_count = len(top_authors) if top_authors else 0
+    bus = git.get("estimated_bus_factor") or git.get("bus_factor")
+    try:
+        bus_n = int(float(bus)) if bus is not None else 0
+    except (TypeError, ValueError):
+        bus_n = 0
+
+    evidence = []
+    if leading_share is not None:
+        evidence.append(f"top_author_share={leading_share:.2f}")
+    if top_authors:
+        evidence.append(f"contributors_observed={contributor_count}")
+    evidence.append(f"bus_factor={bus_n}")
+    if has_codeowners:
+        evidence.append("CODEOWNERS present")
+
+    # No data at all → unverified.
+    if leading_share is None and bus_n == 0 and contributor_count == 0:
         return CriterionScore(
             criterion_id="D7.1",
             value=UNVERIFIED,
             evidence=[],
-            rationale="git_summary did not report a bus-factor estimate.",
+            rationale="git_summary did not report contributor data.",
         )
-    try:
-        bus_n = int(float(bus))
-    except (TypeError, ValueError):
-        bus_n = 0
-    try:
-        contributors_n = int(contributors) if contributors is not None else 0
-    except (TypeError, ValueError):
-        contributors_n = 0
 
-    evidence = [f"estimated_bus_factor={bus_n}", f"contributors={contributors_n}"]
-    if has_codeowners:
-        evidence.append("CODEOWNERS present")
-
-    if bus_n <= 1:
+    # RSF level 0 — *exact* anchor match: "Single contributor authored >80% of code".
+    if leading_share is not None and leading_share > 0.80:
         return CriterionScore(
             criterion_id="D7.1",
             value=0,
             evidence=evidence,
             rationale=(
-                "Single contributor authored the majority of code; no "
-                "co-maintainers (bus factor 1)."
+                f"Single contributor authored {leading_share:.0%} of analyzed "
+                f"commits (>80% threshold); no co-maintainers (RSF D7.1 level 0)."
             ),
         )
-    if bus_n == 2:
+
+    # RSF level 1: "2 contributors share most work; high concentration."
+    # Match either by bus_factor or by top-2 share dominance.
+    if bus_n == 2 or (contributor_count == 2):
         return CriterionScore(
             criterion_id="D7.1",
             value=1,
             evidence=evidence,
-            rationale="2 contributors share most work; high concentration in critical paths.",
+            rationale=(
+                "2 contributors share most work; high concentration in "
+                "critical paths (RSF D7.1 level 1)."
+            ),
         )
-    if 3 <= bus_n <= 4:
+
+    # RSF level 2: "3+ active contributors; some critical paths still single-owner."
+    if bus_n >= 3 and bus_n <= 4 or contributor_count in (3, 4):
         return CriterionScore(
             criterion_id="D7.1",
             value=2,
             evidence=evidence,
-            rationale="3+ active contributors; some critical paths still single-owner.",
+            rationale=(
+                "3+ active contributors; some critical paths still "
+                "single-owner (RSF D7.1 level 2)."
+            ),
         )
-    if bus_n >= 5 and has_codeowners:
+
+    # RSF level 3: "5+ active contributors; CODEOWNERS includes ≥2 reviewers per critical path."
+    if (bus_n >= 5 or contributor_count >= 5) and has_codeowners:
         return CriterionScore(
             criterion_id="D7.1",
             value=3,
             evidence=evidence,
-            rationale="5+ active contributors; CODEOWNERS present.",
+            rationale=(
+                "5+ active contributors with CODEOWNERS in place "
+                "(RSF D7.1 level 3)."
+            ),
         )
+
+    # 5+ contributors without CODEOWNERS doesn't quite hit level 3; cap at 2.
+    if bus_n >= 5 or contributor_count >= 5:
+        return CriterionScore(
+            criterion_id="D7.1",
+            value=2,
+            evidence=evidence,
+            rationale=(
+                "5+ active contributors but no CODEOWNERS — caps at "
+                "RSF D7.1 level 2 (no review-routing structure)."
+            ),
+        )
+
+    # Single-contributor fallback.
     return CriterionScore(
         criterion_id="D7.1",
-        value=2,
+        value=0,
         evidence=evidence,
-        rationale="3+ contributors; CODEOWNERS not present.",
+        rationale=(
+            "Insufficient contributor breadth for any level above 0 "
+            "(RSF D7.1 level 0)."
+        ),
     )
 
 
 def score_d7_2(scored: dict, repo_path: Path) -> CriterionScore:
-    """D7.2 Activity (sustained, not spiky)."""
+    """D7.2 Activity (sustained, not spiky).
+
+    RSF anchors:
+      0: No commits in 6+ months.
+      1: Commits clustered; long quiet periods.
+      2: Commits roughly weekly.
+      3: Commits multiple times per week with trailing-90-day stability.
+      4: Sustained 12-month activity; no >2-week quiet windows.
+      5: Sustained activity with diverse contributor base.
+
+    We map: 30d / 90d / 180d / 365d commit counts to weekly cadence
+    (commits/week ≈ commits_90d / 13), plus contributor diversity from
+    top_authors length.
+    """
     git = _git_summary(scored)
     commits_30d = git.get("commits_last_30_days")
     commits_90d = git.get("commits_last_90_days")
+    commits_180d = git.get("commits_last_180_days")
     commits_365d = git.get("commits_last_365_days")
+    top_authors = git.get("top_authors") or []
+    contributor_count = len(top_authors) if isinstance(top_authors, list) else 0
 
-    if all(v is None for v in (commits_30d, commits_90d, commits_365d)):
-        commit_count = git.get("commit_count")
-        if commit_count is None:
-            return CriterionScore(
-                criterion_id="D7.2",
-                value=UNVERIFIED,
-                evidence=[],
-                rationale="git_summary did not report commit cadence.",
-            )
+    if all(v is None for v in (commits_30d, commits_90d, commits_180d, commits_365d)):
         return CriterionScore(
             criterion_id="D7.2",
             value=UNVERIFIED,
-            evidence=[f"commit_count={commit_count}"],
-            rationale=(
-                "Total commit count available, but cadence (sustained vs spiky) "
-                "requires per-day or per-week distribution. Score unverified."
-            ),
+            evidence=[],
+            rationale="git_summary did not report commit cadence.",
         )
 
+    c30 = int(commits_30d or 0)
+    c90 = int(commits_90d or 0)
+    c180 = int(commits_180d or 0)
+    c365 = int(commits_365d or 0)
+
+    # Approximate weekly cadence over the last 90 days.
+    weekly_90d = c90 / 13.0  # 13 weeks ≈ 90 days.
+
     evidence = [
-        f"commits_last_30d={commits_30d}",
-        f"commits_last_90d={commits_90d}",
-        f"commits_last_365d={commits_365d}",
+        f"commits_last_30d={c30}",
+        f"commits_last_90d={c90}",
+        f"commits_last_180d={c180}",
+        f"commits_last_365d={c365}",
+        f"approx_commits_per_week_90d={weekly_90d:.1f}",
+        f"contributor_count_observed={contributor_count}",
     ]
-    if commits_30d is not None and int(commits_30d) == 0 and commits_365d is not None and int(commits_365d) == 0:
+
+    # Level 0: No commits in 6+ months (RSF anchor verbatim).
+    if c180 == 0:
         return CriterionScore(
             criterion_id="D7.2",
             value=0,
             evidence=evidence,
-            rationale="No commits in 6+ months.",
+            rationale="No commits in 6+ months (RSF D7.2 level 0).",
         )
+
+    # Level 5: sustained activity + diverse contributor base.
+    if c365 >= 200 and weekly_90d >= 5 and contributor_count >= 5:
+        return CriterionScore(
+            criterion_id="D7.2",
+            value=5,
+            evidence=evidence,
+            rationale=(
+                "Sustained activity (≥200 commits/year, weekly cadence ≥5) "
+                "with diverse contributor base (5+) — RSF D7.2 level 5."
+            ),
+        )
+
+    # Level 4: sustained 12-month activity, no big quiet windows.
+    # Approximate "no >2-week quiet windows" as commits in 30d AND 90d AND 180d AND 365d.
+    if c30 >= 4 and c90 >= 13 and c180 >= 26 and c365 >= 52:
+        return CriterionScore(
+            criterion_id="D7.2",
+            value=4,
+            evidence=evidence,
+            rationale=(
+                "Sustained 12-month activity, no >2-week quiet windows "
+                "(weekly+ cadence sustained over 365d). RSF D7.2 level 4."
+            ),
+        )
+
+    # Level 3: multiple commits per week + 90d stability.
+    if weekly_90d >= 3 and c30 >= 6:
+        return CriterionScore(
+            criterion_id="D7.2",
+            value=3,
+            evidence=evidence,
+            rationale=(
+                f"Multiple commits per week ({weekly_90d:.1f}/week over 90d) "
+                "with trailing-90-day stability. RSF D7.2 level 3."
+            ),
+        )
+
+    # Level 2: roughly weekly cadence (≥1/week over 90d).
+    if weekly_90d >= 1:
+        return CriterionScore(
+            criterion_id="D7.2",
+            value=2,
+            evidence=evidence,
+            rationale=(
+                f"Commits roughly weekly ({weekly_90d:.1f}/week over 90d). "
+                "RSF D7.2 level 2."
+            ),
+        )
+
+    # Level 1: clustered with long quiet periods (some activity, but not weekly).
     return CriterionScore(
         criterion_id="D7.2",
-        value=UNVERIFIED,
+        value=1,
         evidence=evidence,
         rationale=(
-            "Activity present, but level distinction (weekly vs daily cadence, "
-            "12-month sustained activity, geographic diversity) requires "
-            "per-window analysis this assessor does not currently produce."
+            f"Commits clustered ({c180} commits in 180d but only {c30} in 30d); "
+            "long quiet periods. RSF D7.2 level 1."
         ),
     )
 
@@ -969,18 +1136,22 @@ def score_d7_3(scored: dict, repo_path: Path) -> CriterionScore:
 def score_d7_4(scored: dict, repo_path: Path) -> CriterionScore:
     """D7.4 Maintainer continuity."""
     git = _git_summary(scored)
-    contributors = (
-        git.get("contributor_count")
-        or git.get("unique_authors")
-        or git.get("active_contributors")
-    )
+    # Read top_authors directly (the precise signal) before falling back to
+    # the legacy contributor_count keys that no current collector emits.
+    top_authors = git.get("top_authors") or []
+    contributors_n = len(top_authors) if isinstance(top_authors, list) else 0
+    if contributors_n == 0:
+        legacy = (
+            git.get("contributor_count")
+            or git.get("unique_authors")
+            or git.get("active_contributors")
+        )
+        try:
+            contributors_n = int(legacy) if legacy is not None else 0
+        except (TypeError, ValueError):
+            contributors_n = 0
     governance = _find_first(repo_path, _GOVERNANCE_CANDIDATES)
     codeowners = _find_first(repo_path, _CODEOWNERS_CANDIDATES)
-
-    try:
-        contributors_n = int(contributors) if contributors is not None else 0
-    except (TypeError, ValueError):
-        contributors_n = 0
 
     evidence = [f"contributors={contributors_n}"]
     if governance:
