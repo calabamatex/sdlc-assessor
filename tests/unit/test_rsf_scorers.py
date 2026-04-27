@@ -194,10 +194,30 @@ def test_d5_4_no_tags_scores_zero(tmp_path: Path, empty_scored: dict) -> None:
     assert result.value == 0
 
 
-def test_d5_4_tags_present_unverified(tmp_path: Path, empty_scored: dict) -> None:
+def test_d5_4_tags_present_scores_one(tmp_path: Path, empty_scored: dict) -> None:
+    """RSF D5.4 level 1: tagged releases present but no automation."""
     empty_scored["repo_meta"]["git_summary"] = {"tag_count": 5}
     result = score_d5_4(empty_scored, tmp_path)
-    assert result.value == UNVERIFIED
+    assert result.value == 1
+
+
+def test_d5_4_release_automation_scores_four(tmp_path: Path, empty_scored: dict) -> None:
+    """RSF D5.4 level 4: release-please / semantic-release / changesets in CI."""
+    empty_scored["repo_meta"]["git_summary"] = {"tag_count": 5}
+    _write(tmp_path, ".github/workflows/release.yml", "uses: googleapis/release-please-action@v4")
+    result = score_d5_4(empty_scored, tmp_path)
+    assert result.value == 4
+
+
+def test_d5_4_release_automation_plus_slsa_scores_five(tmp_path: Path, empty_scored: dict) -> None:
+    empty_scored["repo_meta"]["git_summary"] = {"tag_count": 5}
+    _write(
+        tmp_path,
+        ".github/workflows/release.yml",
+        "uses: googleapis/release-please-action@v4\nuses: slsa-framework/slsa-github-generator@v2",
+    )
+    result = score_d5_4(empty_scored, tmp_path)
+    assert result.value == 5
 
 
 # ---------------------------------------------------------------------------
